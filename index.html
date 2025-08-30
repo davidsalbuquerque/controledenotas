@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CONTROLE DE NOTAS - MELHORADO</title>
+    <!-- Link para o Manifest do PWA -->
+    <link rel="manifest" href="manifest.json">
+    <!-- Cor do tema para a barra de status do navegador -->
+    <meta name="theme-color" content="#4f46e5"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+        th, td {
+            white-space: nowrap;
+        }
+        input[type="number"] {
+            width: 60px;
+            padding: 4px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            text-align: center;
+        }
+        input:disabled {
+            background-color: #f3f4f6;
+            cursor: not-allowed;
+        }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        .ar-header {
+            background-color: #fef9c3;
+            color: #a16207;
+        }
+        .ar-input {
+            background-color: #fefce8;
+        }
+        .needed-grade-placeholder::placeholder {
+            color: #16a34a; /* green-600 */
+            font-weight: 400;
+            opacity: 0.7;
+            font-size: 0.8em;
+        }
+        .status-cell {
+            width: 60px;
+            min-width: 60px;
+            padding: 0;
+        }
+        .status-indicator {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        /* Estilos do Modal */
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        .modal-container {
+            transition: transform 0.3s ease;
+        }
+        /* Estilos do Toast */
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 100;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 30px;
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s, visibility 0.3s;
+        }
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 sm:p-6 md:p-8">
+    <div class="max-w-full mx-auto bg-white rounded-2xl shadow-lg p-6 md:p-8">
+        <div class="mb-6 text-center">
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">CONTROLE DE NOTAS</h1>
+            <p class="text-gray-600 mt-2">Adicione disciplinas e preencha as notas para calcular a média final.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+             <button id="add-subject-btn" class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">Adicionar Disciplina</button>
+             <div class="flex flex-wrap justify-end gap-3">
+                <button id="generate-report-btn" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">Gerar Relatório</button>
+                <button id="generate-pdf-btn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Gerar PDF</button>
+                <button id="save-btn" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">Salvar Dados</button>
+                <label for="load-input" class="cursor-pointer px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Carregar Dados
+                </label>
+                <input type="file" id="load-input" class="hidden" accept=".json">
+            </div>
+        </div>
+
+        <div class="table-container mb-6">
+            <table class="min-w-full divide-y divide-gray-200" id="grades-table">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th rowspan="2" class="sticky left-0 bg-gray-50 z-10 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider align-bottom">Disciplina</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" colspan="9">1º Trimestre</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" colspan="9">2º Trimestre</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" colspan="9">3º Trimestre</th>
+                        <th rowspan="2" class="px-4 py-3 text-center text-xs font-medium text-green-600 uppercase tracking-wider align-bottom">Resultado Final</th>
+                        <th rowspan="2" class="px-2 py-3 text-center text-xs font-medium text-gray-500 align-bottom">Ações</th>
+                    </tr>
+                    <tr>
+                        <th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP1-1</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP1-2</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP1-3</th><th class="px-2 py-2 text-center text-xs font-bold text-blue-600">AP1</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">GIP1</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AE1</th><th class="px-2 py-2 text-center text-xs font-bold text-gray-700">NP1</th><th class="px-2 py-2 text-center text-xs font-medium ar-header">AR1</th><th class="px-2 py-2 text-center text-xs font-bold text-blue-600">NT1</th>
+                        <th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP2-1</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP2-2</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP2-3</th><th class="px-2 py-2 text-center text-xs font-bold text-blue-600">AP2</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">GIP2</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AE2</th><th class="px-2 py-2 text-center text-xs font-bold text-gray-700">NP2</th><th class="px-2 py-2 text-center text-xs font-medium ar-header">AR2</th><th class="px-2 py-2 text-center text-xs font-bold text-blue-600">NT2</th>
+                        <th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP3-1</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP3-2</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AP3-3</th><th class="px-2 py-2 text-center text-xs font-bold text-blue-600">AP3</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">GIP3</th><th class="px-2 py-2 text-center text-xs font-medium text-gray-500">AE3</th><th class="px-2 py-2 text-center text-xs font-bold text-gray-700">NP3</th><th class="px-2 py-2 text-center text-xs font-medium ar-header">AR3</th><th class="px-2 py-2 text-center text-xs font-bold text-blue-600">NT3</th>
+                        <th class="px-2 py-2 text-center text-xs font-bold text-green-700">Média</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <!-- As linhas serão inseridas aqui pelo JavaScript -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Legendas e Fórmulas (sem alteração) -->
+        <div id="legends-formulas-section" class="mt-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h3 class="font-bold text-lg mb-2">Legenda e Fórmulas</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div>
+                    <h4 class="font-semibold mb-2">Componentes da Nota</h4>
+                    <p><span class="font-semibold">AP:</span> Média das Avaliações Parciais</p>
+                    <p><span class="font-semibold">GIP:</span> Grau de Incentivo à Participação</p>
+                    <p><span class="font-semibold">AE:</span> Avaliação de Estudo</p>
+                    <p><span class="font-semibold">NP:</span> Nota Periódica (pré-recuperação)</p>
+                    <p><span class="font-semibold">AR:</span> Avaliação de Recuperação</p>
+                    <p><span class="font-semibold">NT:</span> Nota do Trimestre (pós-recuperação)</p>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-2">Fórmulas de Cálculo</h4>
+                    <p><span class="font-semibold">NP:</span> (0.4 * (AP + GIP)) + (0.6 * AE)</p>
+                    <p class="text-sm text-gray-500">Para Arte e Ed. Física: NP = AP + GIP</p>
+                    <p><span class="font-semibold">Recuperação:</span> Se AR > NP, a NT vira (AR + NP) / 2. Senão, NT = NP.</p>
+                    <p><span class="font-semibold">Média Anual:</span> (NT1 + NT2 + NT3) / 3</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals (sem alteração) -->
+    <div id="report-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">...</div>
+    <div id="pdf-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">...</div>
+    <div id="toast-notification" class="toast"></div>
+
+    <!-- Template para a linha da tabela -->
+    <template id="subject-row-template">
+        <tr class="subject-row">
+            <td class="sticky left-0 bg-white z-10 px-4 py-3 font-medium text-gray-900">
+                <input type="text" class="w-40 p-1 border border-transparent rounded focus:border-gray-300 bg-transparent focus:bg-white" data-field="disciplina">
+            </td>
+            <!-- Campos para as notas -->
+            <td class="px-2 py-3"><input type="number" step="0.1" data-field="ap1.0"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ap1.1"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ap1.2"></td>
+            <td class="px-2 py-3 text-center font-bold" data-result="ap1"></td>
+            <td class="px-2 py-3"><input type="number" step="0.1" data-field="gip1"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ae1"></td>
+            <td class="px-2 py-3 text-center font-bold" data-result="np1"></td><td class="px-2 py-3"><input type="number" step="0.1" class="ar-input" data-field="ar1"></td><td class="px-2 py-3 text-center font-bold" data-result="nt1"></td>
+            
+            <td class="px-2 py-3"><input type="number" step="0.1" data-field="ap2.0"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ap2.1"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ap2.2"></td>
+            <td class="px-2 py-3 text-center font-bold" data-result="ap2"></td>
+            <td class="px-2 py-3"><input type="number" step="0.1" data-field="gip2"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ae2"></td>
+            <td class="px-2 py-3 text-center font-bold" data-result="np2"></td><td class="px-2 py-3"><input type="number" step="0.1" class="ar-input" data-field="ar2"></td><td class="px-2 py-3 text-center font-bold" data-result="nt2"></td>
+            
+            <td class="px-2 py-3"><input type="number" step="0.1" data-field="ap3.0"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ap3.1"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ap3.2"></td>
+            <td class="px-2 py-3 text-center font-bold" data-result="ap3"></td>
+            <td class="px-2 py-3"><input type="number" step="0.1" data-field="gip3"></td><td class="px-2 py-3"><input type="number" step="0.1" data-field="ae3"></td>
+            <td class="px-2 py-3 text-center font-bold" data-result="np3"></td><td class="px-2 py-3"><input type="number" step="0.1" class="ar-input" data-field="ar3"></td><td class="px-2 py-3 text-center font-bold" data-result="nt3"></td>
+            
+            <td class="px-2 py-2 text-center font-bold text-green-700" data-result="media-final"></td>
+            <td class="px-2 py-2 text-center">
+                <button class="delete-row-btn text-red-500 hover:text-red-700 font-bold">X</button>
+            </td>
+        </tr>
+    </template>
+
+
+    <script>
+        // --- CONFIGURAÇÕES GLOBAIS ---
+        const MEDIA_APROVACAO = 6.0;
+        const NOTA_MAXIMA = 10.0;
+
+        // --- ESTADO DA APLICAÇÃO ---
+        let subjectsData = [];
+
+        const initialData = [
+            { disciplina: 'Arte I', hasAE: false, singleAP: true, ap1: [8.0, null, null], gip1: null, ae1: null, ar1: null, ap2: [10.0, null, null], gip2: null, ae2: null, ar2: null, ap3:[null, null, null], gip3: null, ae3: null, ar3: null },
+            { disciplina: 'Ciências Naturais', hasAE: true, singleAP: false, ap1: [8.1, 8.1, 8.1], gip1: null, ae1: 5.4, ar1: 5.0, ap2: [7.4, 10.0, null], gip2: null, ae2: null, ar2: null, ap3:[null, null, null], gip3: null, ae3: null, ar3: null },
+            { disciplina: 'Educação Física', hasAE: false, singleAP: true, ap1: [10.0, null, null], gip1: null, ae1: null, ar1: null, ap2: [10.0, null, null], gip2: null, ae2: null, ar2: null, ap3:[null, null, null], gip3: null, ae3: null, ar3: null },
+            { disciplina: 'Geografia', hasAE: true, singleAP: false, ap1: [4.4, 8.8, null], gip1: null, ae1: 6.0, ar1: 5.6, ap2: [6.4, 10.0, null], gip2: null, ae2: null, ar2: null, ap3:[null, null, null], gip3: null, ae3: null, ar3: null },
+            { disciplina: 'História', hasAE: true, singleAP: false, ap1: [9.0, 10.0, null], gip1: null, ae1: 7.9, ar1: 6.8, ap2: [2.0, 10.0, null], gip2: null, ae2: null, ar2: null, ap3:[null, null, null], gip3: null, ae3: null, ar3: null },
+            { disciplina: 'LEM - Língua Estrangeira', hasAE: true, singleAP: false, ap1: [9.0, 9.0, null], gip1: null, ae1: 9.5, ar1: 9.8, ap2: [10.0, 9.7, null], gip2: null, ae2: null, ar2: null, ap3:[null, null, null], gip3: null, ae3: null, ar3: null },
+            { disciplina: 'Língua Portuguesa', hasAE: true, singleAP: false, ap1: [8.0, 10.0, 7.0], gip1: null, ae1: 7.6, ar1: 7.2, ap2: [6.8, 10.0, 3.6], gip2: null, ae2: null, ar2: null, ap3:[null, null, null], gip3: null, ae3: null, ar3: null },
+            { disciplina: 'Matemática', hasAE: true, singleAP: false, ap1: [2.6, 4.2, 4.0], gip1: null, ae1: 4.4, ar1: 4.8, ap2: [4.8, 4.5, 0.4], gip2: null, ae2: 10.0, ar2: 5.4, ap3:[null, null, null], gip3: null, ae3: null, ar3: null },
+        ];
+        
+        // --- FUNÇÕES DE LÓGICA DE NEGÓCIO (CÁLCULOS) ---
+        
+        function customRound(num) {
+            return parseFloat(num.toFixed(1));
+        }
+
+        function calculateApAvg(grades = []) {
+            const validGrades = grades.filter(g => g !== null);
+            if (validGrades.length === 0) return null;
+            const sum = validGrades.reduce((a, b) => a + b, 0);
+            return customRound(sum / validGrades.length);
+        }
+
+        function calculateNP(ap, gip, ae, hasAE) {
+            if (ap === null) return null;
+            if (hasAE && ae === null) return null;
+            
+            const gipValue = gip ?? 0;
+            const npRaw = hasAE ? (0.4 * (ap + gipValue)) + (0.6 * ae) : ap + gipValue;
+            return customRound(npRaw);
+        }
+
+        function calculateNT(np, ar) {
+            if (np === null) return null;
+            let finalGrade = np;
+            if (ar !== null && ar > np) {
+                const recoveryAvg = (ar + np) / 2;
+                finalGrade = customRound(recoveryAvg);
+            }
+            return Math.min(finalGrade, NOTA_MAXIMA);
+        }
+
+        function calculateAllGradesForRow(subject) {
+            const results = {};
+            
+            for (let i = 1; i <= 3; i++) {
+                const ap = calculateApAvg(subject[`ap${i}`]);
+                const np = calculateNP(ap, subject[`gip${i}`], subject[`ae${i}`], subject.hasAE);
+                const nt = calculateNT(np, subject[`ar${i}`]);
+                results[`ap${i}`] = ap;
+                results[`np${i}`] = np;
+                results[`nt${i}`] = nt;
+            }
+
+            const nts = [results.nt1, results.nt2, results.nt3].filter(n => n !== null);
+            results.mediaFinal = nts.length === 3 ? customRound(nts.reduce((a, b) => a + b, 0) / 3) : null;
+            
+            return results;
+        }
+
+        function calculateNeededGrades(results) {
+            const { nt1, nt2 } = results;
+            const needed = {};
+            const totalPointsNeeded = MEDIA_APROVACAO * 3;
+
+            if (nt1 === null) {
+                const neededPerTri = MEDIA_APROVACAO;
+                needed.nt1 = neededPerTri;
+                needed.nt2 = neededPerTri;
+                needed.nt3 = neededPerTri;
+            } else if (nt2 === null) {
+                const remainingPoints = totalPointsNeeded - nt1;
+                const neededPerTri = Math.max(0, remainingPoints / 2);
+                needed.nt2 = customRound(neededPerTri);
+                needed.nt3 = customRound(neededPerTri);
+            } else {
+                const remainingPoints = totalPointsNeeded - nt1 - nt2;
+                needed.nt3 = customRound(Math.max(0, remainingPoints));
+            }
+            return needed;
+        }
+
+
+        // --- FUNÇÕES DE MANIPULAÇÃO DO DOM ---
+
+        function updateRowUI(row, results, subject) {
+            for (const key in results) {
+                const cell = row.querySelector(`[data-result="${key.replace('Final', '-final')}"]`);
+                if (cell) {
+                    cell.textContent = results[key] !== null ? results[key].toFixed(1) : '-';
+                }
+            }
+            
+            ['ap', 'np', 'nt'].forEach(prefix => {
+                for (let i = 1; i <= 3; i++) {
+                    const key = `${prefix}${i}`;
+                    const cell = row.querySelector(`[data-result="${key}"]`);
+                    const value = results[key];
+                    if(cell && value !== null) {
+                       cell.className = `px-2 py-3 text-center font-bold ${value < MEDIA_APROVACAO ? 'text-red-500' : 'text-blue-600'}`;
+                    }
+                }
+            });
+
+            const neededGrades = calculateNeededGrades(results);
+            for (let i = 1; i <= 3; i++) {
+                const isTrimesterOpen = results[`nt${i}`] === null;
+                const neededNT = neededGrades[`nt${i}`];
+
+                row.querySelectorAll(`[data-field^="ap${i}"], [data-field="gip${i}"], [data-field="ae${i}"], [data-field="ar${i}"]`).forEach(input => {
+                    input.placeholder = '';
+                    input.classList.remove('needed-grade-placeholder');
+                });
+                
+                if (isTrimesterOpen && neededNT !== undefined) {
+                    const cappedNeededNT = Math.min(neededNT, NOTA_MAXIMA);
+
+                    ['ap', 'ae'].forEach(prefix => {
+                        row.querySelectorAll(`[data-field^="${prefix}${i}"]`).forEach(input => {
+                            if (input && input.value === '') {
+                                input.placeholder = cappedNeededNT.toFixed(1);
+                                input.classList.add('needed-grade-placeholder');
+                            }
+                        });
+                    });
+
+                    const currentNP = results[`np${i}`];
+                    const arInput = row.querySelector(`[data-field="ar${i}"]`);
+                    if (arInput && arInput.value === '' && currentNP !== null && currentNP < cappedNeededNT) {
+                        let neededAR = (2 * cappedNeededNT) - currentNP;
+                        neededAR = Math.min(customRound(neededAR), NOTA_MAXIMA);
+                        if (neededAR > currentNP) {
+                            arInput.placeholder = neededAR.toFixed(1);
+                            arInput.classList.add('needed-grade-placeholder');
+                        }
+                    }
+                }
+            }
+        }
+        
+        function renderTable() {
+            const tbody = document.querySelector('#grades-table tbody');
+            const template = document.getElementById('subject-row-template');
+            tbody.innerHTML = ''; 
+
+            subjectsData.forEach((subject, index) => {
+                const row = template.content.cloneNode(true).querySelector('tr');
+                row.dataset.index = index;
+
+                row.querySelectorAll('input[data-field]').forEach(input => {
+                    const fieldPath = input.dataset.field.split('.');
+                    let value = subject;
+                    for (const key of fieldPath) {
+                        value = value ? value[key] : undefined;
+                    }
+                    
+                    if (input.type === 'text') {
+                        input.value = value || '';
+                    } else if (input.type === 'number') {
+                        input.value = (value !== null && value !== undefined) ? value.toFixed(1) : '';
+                    }
+
+                    const isApField = fieldPath[0].startsWith('ap');
+                    const isAeField = fieldPath[0].startsWith('ae');
+
+                    if ( (isApField && subject.singleAP && fieldPath.length > 1 && fieldPath[1] !== '0') || (isAeField && !subject.hasAE) ) {
+                        input.disabled = true;
+                    }
+                });
+                
+                const results = calculateAllGradesForRow(subject);
+                updateRowUI(row, results, subject);
+
+                tbody.appendChild(row);
+            });
+        }
+        
+        // --- FUNÇÕES DE PERSISTÊNCIA E EVENTOS ---
+
+        function handleInputChange(event) {
+            const input = event.target;
+            const row = input.closest('tr');
+            if (!row) return;
+
+            const index = parseInt(row.dataset.index, 10);
+            const fieldPath = input.dataset.field.split('.');
+            let value = input.value;
+
+            let currentLevel = subjectsData[index];
+            for (let i = 0; i < fieldPath.length - 1; i++) {
+                currentLevel = currentLevel[fieldPath[i]];
+            }
+
+            if (input.type === 'number') {
+                value = value === '' ? null : parseFloat(value);
+            }
+            currentLevel[fieldPath[fieldPath.length - 1]] = value;
+            
+            const results = calculateAllGradesForRow(subjectsData[index]);
+            updateRowUI(row, results, subjectsData[index]);
+        }
+        
+        function addNewSubject() {
+             const newSubject = {
+                disciplina: 'Nova Disciplina',
+                hasAE: true,
+                singleAP: false,
+                ap1: [null, null, null], gip1: null, ae1: null, ar1: null,
+                ap2: [null, null, null], gip2: null, ae2: null, ar2: null,
+                ap3: [null, null, null], gip3: null, ae3: null, ar3: null
+            };
+            subjectsData.push(newSubject);
+            renderTable();
+            saveData();
+        }
+
+        function deleteSubject(index) {
+            if (confirm('Tem certeza que deseja excluir esta disciplina?')) {
+                subjectsData.splice(index, 1);
+                renderTable();
+                saveData();
+            }
+        }
+        
+        function showToast(message) {
+            const toast = document.getElementById('toast-notification');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function saveData() {
+            localStorage.setItem('gradeData_v2', JSON.stringify(subjectsData));
+            showToast('Dados salvos com sucesso!');
+        }
+
+        function loadData() {
+            const savedData = localStorage.getItem('gradeData_v2');
+            subjectsData = savedData ? JSON.parse(savedData) : initialData;
+            renderTable();
+        }
+
+        function exportDataToFile() {
+            saveData();
+            const jsonData = JSON.stringify(subjectsData, null, 2);
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const timestamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+            a.download = `notas_${timestamp}.json`;
+            a.href = url;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function importDataFromFile(event) {
+             const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    subjectsData = JSON.parse(e.target.result);
+                    renderTable();
+                    saveData();
+                    showToast("Dados carregados com sucesso!");
+                } catch (error) {
+                    alert("Erro ao carregar o arquivo. Verifique o formato.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- INICIALIZAÇÃO ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            
+            const tableBody = document.querySelector('#grades-table tbody');
+            tableBody.addEventListener('input', handleInputChange);
+            tableBody.addEventListener('click', (e) => {
+                if (e.target.classList.contains('delete-row-btn')) {
+                    const index = e.target.closest('tr').dataset.index;
+                    deleteSubject(index);
+                }
+            });
+
+            document.getElementById('add-subject-btn').addEventListener('click', addNewSubject);
+            document.getElementById('save-btn').addEventListener('click', exportDataToFile);
+            document.getElementById('load-input').addEventListener('change', importDataFromFile);
+
+        });
+
+        // REGISTRO DO SERVICE WORKER PARA PWA
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/service-worker.js').then(registration => {
+              console.log('ServiceWorker registrado com sucesso: ', registration.scope);
+            }).catch(error => {
+              console.log('Falha no registro do ServiceWorker: ', error);
+            });
+          });
+        }
+    </script>
+</body>
+</html>
